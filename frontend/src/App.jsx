@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, Navigate } from 'react-router-dom';
 import Login from './components/Login';
 import Register from './components/Register';
+import Workspace from './pages/Workspace';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -10,7 +11,6 @@ function App() {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
-      // Basic decode or just set user from localStorage
       const storedUser = localStorage.getItem('user');
       if (storedUser) {
         setUser(JSON.parse(storedUser));
@@ -57,23 +57,21 @@ function App() {
         </div>
       </nav>
 
-      <div className="p-6">
+      <div>
         <Routes>
           <Route
             path="/"
             element={
               user ? (
-                <div className="text-center mt-20">
-                  <h2 className="text-3xl font-bold">Welcome to BioGraph</h2>
-                  <p className="text-gray-600 mt-4">
-                    Search for biomedical entities, explore the knowledge graph, and ask AI research questions.
-                  </p>
-                  <p className="text-sm text-gray-400 mt-8">(Graph UI will be added on Day 2)</p>
-                </div>
+                <Navigate to="/workspace" replace />
               ) : (
-                <Navigate to="/login" />
+                <Navigate to="/login" replace />
               )
             }
+          />
+          <Route
+            path="/workspace"
+            element={user ? <Workspace /> : <Navigate to="/login" />}
           />
           <Route path="/login" element={<Login setUser={setUser} />} />
           <Route path="/register" element={<Register setUser={setUser} />} />
