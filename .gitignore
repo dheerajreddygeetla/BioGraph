@@ -1,0 +1,59 @@
+# ========== Logs ==========
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ========== Node ==========
+node_modules/
+dist/
+dist-ssr/
+build/
+*.local
+
+# ========== Environment Variables (Secrets) ==========
+.env
+.env.local
+.env.*.local
+backend/.env
+ai-service/.env
+frontend/.env
+
+# ========== Python ==========
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+venv311/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ========== IDE / Editor ==========
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
+
+# ========== OS / System ==========
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+# ========== Database ==========
+*.sqlite
+*.db
