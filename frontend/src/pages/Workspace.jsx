@@ -3,6 +3,7 @@ import axios from 'axios';
 import SearchBar from '../components/SearchBar';
 import GraphCanvas from '../components/GraphCanvas';
 import EntityPanel from '../components/EntityPanel';
+import ResearchPanel from '../components/ResearchPanel';
 
 const Workspace = () => {
   const [selectedEntity, setSelectedEntity] = useState(null);
@@ -72,6 +73,7 @@ const Workspace = () => {
         {/* Entity Details Panel */}
         <div className="w-96 bg-white border-l border-gray-200 overflow-y-auto p-4">
           <EntityPanel entity={selectedEntity} />
+          <ResearchPanel selectedEntity={selectedEntity} />
         </div>
       </div>
     </div>

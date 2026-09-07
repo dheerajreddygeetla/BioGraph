@@ -13,6 +13,7 @@ app.use(express.json());
 
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/entities', require('./routes/entityRoutes'));
+app.use('/api/research', require('./routes/researchRoutes'));
 app.use('/api/relationships', require('./routes/relationshipRoutes'));
 app.use('/api/graph', require('./routes/graphRoutes'));   // NEW
 
