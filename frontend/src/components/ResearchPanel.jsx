@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import AgentSteps from './AgentSteps';
 
 const ResearchPanel = ({ selectedEntity }) => {
   const [question, setQuestion] = useState('');
@@ -7,35 +8,55 @@ const ResearchPanel = ({ selectedEntity }) => {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [jobId, setJobId] = useState(null);
+  const [steps, setSteps] = useState([]);
+  const [savedSessions, setSavedSessions] = useState([]);
+
+  // Fetch saved sessions on mount
+  useEffect(() => {
+    fetchSavedSessions();
+  }, []);
+
+  const fetchSavedSessions = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const { data } = await axios.get('http://localhost:5000/api/research/saved', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setSavedSessions(data);
+    } catch (err) {
+      console.error('Failed to fetch saved sessions:', err);
+    }
+  };
 
   const pollJobStatus = async (id) => {
-    console.log(`🔄 Polling job ${id}...`);
     try {
       const token = localStorage.getItem('token');
       const { data } = await axios.get(
         `http://localhost:5000/api/research/status/${id}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      console.log(`📊 Job ${id} state:`, data.state);
-      
       if (data.state === 'completed') {
-        console.log(`✅ Job ${id} completed! Result:`, data.result);
         setResult(data.result);
+        // Extract steps from progress
+        if (data.progress && data.progress.steps) {
+          setSteps(data.progress.steps);
+        }
         setLoading(false);
         setJobId(null);
         return;
       } else if (data.state === 'failed') {
-        console.log(`❌ Job ${id} failed:`, data.error);
         setError(data.error || 'Job failed');
         setLoading(false);
         setJobId(null);
         return;
       } else {
-        console.log(`⏳ Job ${id} still ${data.state}, polling again in 2s...`);
+        // Update steps if available
+        if (data.progress && data.progress.steps) {
+          setSteps(data.progress.steps);
+        }
         setTimeout(() => pollJobStatus(id), 2000);
       }
     } catch (err) {
-      console.error('🔥 Polling error:', err);
       setError(err.response?.data?.message || 'Failed to get job status');
       setLoading(false);
       setJobId(null);
@@ -44,22 +65,17 @@ const ResearchPanel = ({ selectedEntity }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!question.trim() || !selectedEntity) {
-      console.log('⚠️ Missing question or selected entity');
-      return;
-    }
+    if (!question.trim() || !selectedEntity) return;
 
-    console.log('📤 Submitting research question:', { question, entityId: selectedEntity.id });
     setLoading(true);
     setError('');
     setResult(null);
     setJobId(null);
+    setSteps([]);
 
     try {
       const token = localStorage.getItem('token');
-      console.log('🔑 Using token:', token ? 'Token exists' : 'NO TOKEN FOUND!');
-      
-      const response = await axios.post(
+      const { data } = await axios.post(
         'http://localhost:5000/api/research/query',
         {
           question: question.trim(),
@@ -67,33 +83,36 @@ const ResearchPanel = ({ selectedEntity }) => {
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      
-      console.log('✅ Backend response:', response.data);
-      
-      if (response.data.jobId) {
-        console.log(`📌 Job queued with ID: ${response.data.jobId}`);
-        setJobId(response.data.jobId);
-        pollJobStatus(response.data.jobId);
-      } else {
-        console.error('⚠️ No jobId in response:', response.data);
-        setError('Server did not return a job ID');
-        setLoading(false);
+      if (data.jobId) {
+        setJobId(data.jobId);
+        pollJobStatus(data.jobId);
       }
     } catch (err) {
-      console.error('🔥 Research query error:', err);
-      console.error('Error details:', {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-        headers: err.response?.headers
-      });
-      
-      setError(
-        err.response?.data?.message || 
-        err.message || 
-        'Failed to start research job. Check backend logs.'
-      );
+      setError(err.response?.data?.message || 'Failed to start research job.');
       setLoading(false);
+    }
+  };
+
+  const handleSaveSession = async () => {
+    if (!result) return;
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(
+        'http://localhost:5000/api/research/save',
+        {
+          question,
+          answer: result.answer,
+          citations: result.citations || [],
+          confidence: result.confidence || 0.5,
+          agentSteps: steps,
+          entityId: selectedEntity?.id,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      alert('Session saved!');
+      fetchSavedSessions(); // refresh list
+    } catch (err) {
+      alert('Failed to save session: ' + err.message);
     }
   };
 
@@ -117,21 +136,23 @@ const ResearchPanel = ({ selectedEntity }) => {
           {loading ? 'Processing...' : 'Ask AI'}
         </button>
       </form>
-      
       {!selectedEntity && (
         <p className="text-sm text-amber-600 mt-2">Select a node in the graph to ask about it.</p>
       )}
-      
       {error && (
         <div className="mt-3 p-2 bg-red-100 text-red-700 rounded text-sm whitespace-pre-wrap">
           {error}
         </div>
       )}
-      
+      {loading && (
+        <div className="mt-3 p-2 bg-blue-50 text-blue-700 rounded text-sm">
+          Job queued. Waiting for results...
+        </div>
+      )}
+      {steps.length > 0 && <AgentSteps steps={steps} />}
       {result && (
         <div className="mt-4 border-t pt-3">
           <div className="text-gray-800 whitespace-pre-wrap">{result.answer}</div>
-          
           {result.citations && result.citations.length > 0 && (
             <div className="mt-2">
               <span className="text-sm font-semibold text-gray-600">Citations:</span>
@@ -142,7 +163,6 @@ const ResearchPanel = ({ selectedEntity }) => {
               </ul>
             </div>
           )}
-          
           {result.confidence !== undefined && (
             <div className="mt-2 flex items-center">
               <span className="text-sm font-medium text-gray-600">Confidence: </span>
@@ -157,8 +177,30 @@ const ResearchPanel = ({ selectedEntity }) => {
               </span>
             </div>
           )}
+          <button
+            onClick={handleSaveSession}
+            className="mt-3 w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 transition"
+          >
+            Save Session
+          </button>
         </div>
       )}
+      <div className="mt-4">
+        <h4 className="text-sm font-semibold text-gray-700">Saved Sessions</h4>
+        {savedSessions.length === 0 ? (
+          <p className="text-sm text-gray-500">No saved sessions yet.</p>
+        ) : (
+          <ul className="mt-1 space-y-1">
+            {savedSessions.map((sess) => (
+              <li key={sess._id} className="text-sm border-b pb-1">
+                <div className="font-medium">{sess.question}</div>
+                <div className="text-gray-600 truncate">{sess.answer}</div>
+                <div className="text-xs text-gray-400">{new Date(sess.createdAt).toLocaleString()}</div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 };

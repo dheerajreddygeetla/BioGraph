@@ -1,5 +1,5 @@
 const { researchQueue } = require('../config/queue');
-const { getGraphContext } = require('../services/graphService');
+const ResearchSession = require('../models/ResearchSession');
 
 // @desc    Start research job (enqueue)
 // @route   POST /api/research/query
@@ -11,16 +11,14 @@ const researchQuery = async (req, res, next) => {
       return res.status(400).json({ message: 'Question is required' });
     }
 
-    // Add job to queue
     const job = await researchQueue.add('research-query', {
       question,
       entityId,
     });
 
-    // Return job ID immediately
     res.status(202).json({
       jobId: job.id,
-      message: 'Research job queued. Check status via /api/research/status/:jobId',
+      message: 'Research job queued.',
     });
   } catch (error) {
     console.error('Queue error:', error.message);
@@ -28,7 +26,7 @@ const researchQuery = async (req, res, next) => {
   }
 };
 
-// @desc    Get job status and result
+// @desc    Get job status (including agent steps)
 // @route   GET /api/research/status/:jobId
 // @access  Private
 const getJobStatus = async (req, res, next) => {
@@ -41,11 +39,11 @@ const getJobStatus = async (req, res, next) => {
 
     const state = await job.getState();
     const result = job.returnvalue;
-    const progress = job.progress;
+    const progress = job.progress; // contains steps if set
 
     res.json({
       jobId,
-      state, // 'waiting', 'active', 'completed', 'failed'
+      state,
       progress,
       result: state === 'completed' ? result : null,
       error: state === 'failed' ? job.failedReason : null,
@@ -55,4 +53,49 @@ const getJobStatus = async (req, res, next) => {
   }
 };
 
-module.exports = { researchQuery, getJobStatus };
+// @desc    Save a research session
+// @route   POST /api/research/save
+// @access  Private
+const saveSession = async (req, res, next) => {
+  try {
+    const { question, answer, citations, confidence, agentSteps, entityId } = req.body;
+    if (!question || !answer) {
+      return res.status(400).json({ message: 'Question and answer are required' });
+    }
+
+    const session = await ResearchSession.create({
+      user: req.user._id,
+      question,
+      answer,
+      citations: citations || [],
+      confidence: confidence || 0.5,
+      agentSteps: agentSteps || [],
+      entityId: entityId || null,
+    });
+
+    res.status(201).json(session);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get all saved sessions for the current user
+// @route   GET /api/research/saved
+// @access  Private
+const getSavedSessions = async (req, res, next) => {
+  try {
+    const sessions = await ResearchSession.find({ user: req.user._id })
+      .sort({ createdAt: -1 })
+      .populate('entityId', 'name type');
+    res.json(sessions);
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  researchQuery,
+  getJobStatus,
+  saveSession,
+  getSavedSessions,
+};

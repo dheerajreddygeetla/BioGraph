@@ -1,7 +1,7 @@
 const { Worker } = require('bullmq');
-const axios = require('axios');
 const { connection } = require('../config/queue');
-const { getGraphContext } = require('../services/graphService');  // <-- import
+const { getGraphContext } = require('../services/graphService');
+const AgentService = require('../services/agentService');
 
 const researchWorker = new Worker(
   'research',
@@ -10,26 +10,21 @@ const researchWorker = new Worker(
     const { question, entityId } = job.data;
 
     try {
-      // Fetch graph context using the shared service
+      // Step 1: Fetch graph context
       let context = { nodes: [], edges: [] };
       if (entityId) {
         const graphData = await getGraphContext(entityId, 2);
-        if (graphData) {
-          context = graphData;
-        }
+        if (graphData) context = graphData;
       }
 
-      // Call Python AI service
-      const aiResponse = await axios.post('http://localhost:8000/generate', {
-        question,
-        context,
-      });
+      // Step 2: Run agent pipeline
+      const { steps, finalOutput } = await AgentService.runPipeline(question, entityId, context);
 
-      return {
-        answer: aiResponse.data.answer,
-        citations: aiResponse.data.citations || [],
-        confidence: aiResponse.data.confidence || 0.5,
-      };
+      // Store steps in job progress (so frontend can show them)
+      await job.updateProgress({ steps });
+
+      // Return final result
+      return finalOutput;
     } catch (error) {
       console.error('Worker error:', error.message);
       throw error;
