@@ -5,6 +5,7 @@ const PaperSchema = new mongoose.Schema(
     title: {
       type: String,
       required: true,
+      index: true,
     },
     authors: [String],
     publicationDate: Date,
@@ -12,14 +13,18 @@ const PaperSchema = new mongoose.Schema(
     doi: {
       type: String,
       unique: true,
-      sparse: true,
+      sparse: true, // allows multiple docs with no DOI
+      trim: true,
     },
     abstract: String,
-    // We'll add chunk references later
+    fullText: String,
   },
   {
     timestamps: true,
   }
 );
+
+// Compound index for full-text search on title + abstract
+PaperSchema.index({ title: 'text', abstract: 'text' });
 
 module.exports = mongoose.model('Paper', PaperSchema);

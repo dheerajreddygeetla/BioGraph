@@ -1,12 +1,12 @@
 const { researchQueue } = require('../config/queue');
 const ResearchSession = require('../models/ResearchSession');
 
-// @desc    Start research job (enqueue)
+// @desc    Start research job (enqueue) – supports filters
 // @route   POST /api/research/query
 // @access  Private
 const researchQuery = async (req, res, next) => {
   try {
-    const { question, entityId } = req.body;
+    const { question, entityId, filters } = req.body;
     if (!question) {
       return res.status(400).json({ message: 'Question is required' });
     }
@@ -14,6 +14,7 @@ const researchQuery = async (req, res, next) => {
     const job = await researchQueue.add('research-query', {
       question,
       entityId,
+      filters: filters || {},
     });
 
     res.status(202).json({
@@ -39,7 +40,7 @@ const getJobStatus = async (req, res, next) => {
 
     const state = await job.getState();
     const result = job.returnvalue;
-    const progress = job.progress; // contains steps if set
+    const progress = job.progress;
 
     res.json({
       jobId,

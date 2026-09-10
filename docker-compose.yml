@@ -1,19 +1,269 @@
 services:
+  # ============================================================
+  # DATABASES
+  # ============================================================
   mongo:
     image: mongo:6.0
     container_name: biograph-mongo
-    restart: always
+    restart: unless-stopped
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - biograph_net
 
   redis:
     image: redis:7-alpine
     container_name: biograph-redis
-    restart: always
+    restart: unless-stopped
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - biograph_net
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: biograph-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/biograph123
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_memory_heap_max__size: 1G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    networks:
+      - biograph_net
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: biograph-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__API_KEY: biograph_qdrant_key
+      QDRANT__LOG_LEVEL: INFO
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/localhost/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - biograph_net
+
+  # ============================================================
+  # MICROSERVICES
+  # ============================================================
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+    container_name: biograph-auth
+    restart: unless-stopped
+    environment:
+      PORT: 5001
+      SERVICE_NAME: auth-service
+      LOG_LEVEL: info
+      MONGO_URI: mongodb://mongo:27017/biograph
+      JWT_SECRET: your_super_secret_key_change_this_in_production
+      JWT_EXPIRE: 7d
+      NODE_ENV: production
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - biograph_net
+
+  entity-service:
+    build:
+      context: .
+      dockerfile: services/entity-service/Dockerfile
+    container_name: biograph-entity
+    restart: unless-stopped
+    environment:
+      PORT: 5003
+      SERVICE_NAME: entity-service
+      LOG_LEVEL: info
+      MONGO_URI: mongodb://mongo:27017/biograph
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: biograph123
+      JWT_SECRET: your_super_secret_key_change_this_in_production
+      NODE_ENV: production
+    depends_on:
+      mongo:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    networks:
+      - biograph_net
+
+  research-service:
+    build:
+      context: .
+      dockerfile: services/research-service/Dockerfile
+    container_name: biograph-research
+    restart: unless-stopped
+    environment:
+      PORT: 5004
+      SERVICE_NAME: research-service
+      LOG_LEVEL: info
+      MONGO_URI: mongodb://mongo:27017/biograph
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: biograph123
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: biograph_qdrant_key
+      QDRANT_COLLECTION: biograph_papers
+      EMBEDDING_PROVIDER: local
+      EMBEDDING_MODEL: Xenova/all-MiniLM-L6-v2
+      EMBEDDING_DIMENSION: 384
+      RERANKER_MODEL: Xenova/ms-marco-MiniLM-L-6-v2
+      NCBI_TOOL: biograph-research-platform
+      NCBI_EMAIL: your.email@example.com
+      JWT_SECRET: your_super_secret_key_change_this_in_production
+      NODE_ENV: production
+    volumes:
+      - hf_cache:/home/nodejs/.cache/huggingface
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks:
+      - biograph_net
+
+  research-worker:
+    build:
+      context: .
+      dockerfile: services/research-service/Dockerfile
+    container_name: biograph-worker
+    restart: unless-stopped
+    command: ["node", "src/worker.js"]
+    environment:
+      SERVICE_NAME: research-worker
+      LOG_LEVEL: info
+      MONGO_URI: mongodb://mongo:27017/biograph
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: biograph123
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: biograph_qdrant_key
+      QDRANT_COLLECTION: biograph_papers
+      EMBEDDING_PROVIDER: local
+      EMBEDDING_MODEL: Xenova/all-MiniLM-L6-v2
+      EMBEDDING_DIMENSION: 384
+      RERANKER_MODEL: Xenova/ms-marco-MiniLM-L-6-v2
+      NCBI_TOOL: biograph-research-platform
+      NCBI_EMAIL: your.email@example.com
+      JWT_SECRET: your_super_secret_key_change_this_in_production
+      NODE_ENV: production
+    volumes:
+      - hf_cache:/home/nodejs/.cache/huggingface
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      research-service:
+        condition: service_started
+    networks:
+      - biograph_net
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: biograph-gateway
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: 5000
+      SERVICE_NAME: api-gateway
+      LOG_LEVEL: info
+      # In Docker, all service hostnames resolve on the shared network
+      MONOLITH_URL: http://entity-service:5003
+      AUTH_SERVICE_URL: http://auth-service:5001
+      ENTITY_SERVICE_URL: http://entity-service:5003
+      RESEARCH_SERVICE_URL: http://research-service:5004
+      NODE_ENV: production
+    depends_on:
+      auth-service:
+        condition: service_started
+      entity-service:
+        condition: service_started
+      research-service:
+        condition: service_started
+    networks:
+      - biograph_net
+
+  # ============================================================
+  # FRONTEND
+  # ============================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: biograph-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      api-gateway:
+        condition: service_started
+    networks:
+      - biograph_net
 
 volumes:
   mongo_data:
+  redis_data:
+  neo4j_data:
+  neo4j_logs:
+  qdrant_data:
+  hf_cache:
+
+networks:
+  biograph_net:
+    driver: bridge

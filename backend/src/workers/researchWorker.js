@@ -1,32 +1,56 @@
 const { Worker } = require('bullmq');
 const { connection } = require('../config/queue');
-const { getGraphContext } = require('../services/graphService');
+const Neo4jService = require('../services/neo4jService');
 const AgentService = require('../services/agentService');
+const Entity = require('../models/Entity');
 
 const researchWorker = new Worker(
   'research',
   async (job) => {
-    console.log(`Processing job ${job.id} with data:`, job.data);
-    const { question, entityId } = job.data;
+    console.log(`\n🔬 Processing job ${job.id}`);
+    console.log(`   Question: "${job.data.question}"`);
+    console.log(`   Entity:   ${job.data.entityId}`);
+    console.log(`   Filters:  ${JSON.stringify(job.data.filters || {})}`);
+
+    const { question, entityId, filters } = job.data;
 
     try {
-      // Step 1: Fetch graph context
-      let context = { nodes: [], edges: [] };
+      // 1. Resolve entity name (for logging)
+      let entityName = null;
       if (entityId) {
-        const graphData = await getGraphContext(entityId, 2);
-        if (graphData) context = graphData;
+        const entity = await Entity.findById(entityId).select('name type');
+        if (entity) entityName = entity.name;
       }
 
-      // Step 2: Run agent pipeline
-      const { steps, finalOutput } = await AgentService.runPipeline(question, entityId, context);
+      // 2. Fetch graph context from Neo4j
+      let graphContext = { nodes: [], edges: [] };
+      if (entityId) {
+        console.log(`   📊 Fetching graph context (depth 2)...`);
+        graphContext = await Neo4jService.getGraph(entityId, 2);
+        console.log(`   ✅ Graph: ${graphContext.nodes.length} nodes, ${graphContext.edges.length} edges`);
+      }
 
-      // Store steps in job progress (so frontend can show them)
+      // 3. Run the multi-agent pipeline (with filters)
+      console.log(`   🤖 Running agent pipeline...`);
+      const { steps, finalOutput } = await AgentService.runPipeline(
+        question,
+        entityId,
+        graphContext,
+        filters || {}
+      );
+
+      // 4. Update job progress with steps
       await job.updateProgress({ steps });
 
-      // Return final result
+      // 5. Log summary
+      console.log(`   ✅ Job ${job.id} complete`);
+      console.log(`   📝 Answer: ${finalOutput.answer.slice(0, 120)}...`);
+      console.log(`   📊 Confidence: ${finalOutput.confidence}`);
+      console.log(`   ⏱️  Duration: ${finalOutput.metadata?.duration_ms}ms\n`);
+
       return finalOutput;
     } catch (error) {
-      console.error('Worker error:', error.message);
+      console.error(`   ❌ Job ${job.id} failed:`, error.message);
       throw error;
     }
   },
@@ -36,12 +60,14 @@ const researchWorker = new Worker(
   }
 );
 
-researchWorker.on('completed', (job, result) => {
-  console.log(`Job ${job.id} completed with result:`, result);
+researchWorker.on('completed', (job) => {
+  console.log(`✅ Job ${job.id} completed`);
 });
 
 researchWorker.on('failed', (job, err) => {
-  console.error(`Job ${job.id} failed with error:`, err);
+  console.error(`❌ Job ${job?.id} failed:`, err.message);
 });
+
+console.log('🚀 Research worker started. Waiting for jobs...');
 
 module.exports = { researchWorker };

@@ -1,0 +1,35 @@
+{
+  "name": "@biograph/research-service",
+  "version": "1.0.0",
+  "description": "Research orchestration + AI pipeline microservice for BioGraph",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "worker": "node src/worker.js",
+    "worker:dev": "nodemon src/worker.js"
+  },
+  "overrides": {
+  "sharp": "^0.35.3",
+  "qs": "6.16.0"
+},
+  "dependencies": {
+    "@biograph/shared": "file:../../shared",
+    "@huggingface/transformers": "^3.8.1",
+    "@qdrant/js-client-rest": "^1.19.0",
+    "axios": "^1.6.2",
+    "bullmq": "^5.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
+    "ioredis": "^5.3.2",
+    "mongoose": "^7.6.3",
+    "neo4j-driver": "^5.15.0",
+    "openai": "^4.20.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@biograph/shared",
+  "version": "1.0.0",
+  "description": "Shared middleware and utilities for BioGraph microservices",
+  "main": "index.js",
+  "scripts": {},
+  "dependencies": {
+    "jsonwebtoken": "^9.0.2",
+    "ioredis": "^5.3.2",
+    "winston": "^3.11.0"
+  }
+}

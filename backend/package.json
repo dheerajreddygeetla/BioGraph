@@ -12,7 +12,14 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "overrides": {
+    "sharp": "^0.35.3",
+    "adm-zip": "^0.6.0",
+    "qs": "6.16.0"
+  },
   "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "@qdrant/js-client-rest": "^1.19.0",
     "axios": "^1.20.0",
     "bcryptjs": "^3.0.3",
     "bullmq": "^6.3.4",
@@ -22,7 +29,9 @@
     "express-rate-limit": "^8.7.0",
     "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.9.4"
+    "mongoose": "^9.9.4",
+    "neo4j-driver": "^6.2.0",
+    "openai": "^7.13.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
