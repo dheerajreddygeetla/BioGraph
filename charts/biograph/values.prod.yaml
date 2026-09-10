@@ -1,0 +1,88 @@
+# Production overrides – more replicas, higher limits, observability on
+global:
+  environment: production
+
+mongo:
+  replicas: 3
+  storage: 20Gi
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      memory: "2Gi"
+
+redis:
+  replicas: 3
+  storage: 5Gi
+
+neo4j:
+  replicas: 1
+  storage: 20Gi
+  resources:
+    requests:
+      cpu: "1"
+      memory: "2Gi"
+    limits:
+      memory: "4Gi"
+
+qdrant:
+  replicas: 1
+  storage: 20Gi
+
+authService:
+  replicas: 3
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 12
+    targetCPUUtilizationPercentage: 70
+
+entityService:
+  replicas: 3
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 12
+    targetCPUUtilizationPercentage: 70
+
+researchService:
+  replicas: 3
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 15
+    targetCPUUtilizationPercentage: 75
+
+researchWorker:
+  replicas: 3
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+
+gateway:
+  replicas: 3
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 12
+    targetCPUUtilizationPercentage: 70
+
+frontend:
+  replicas: 3
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 75
+
+prometheus:
+  enabled: true
+grafana:
+  enabled: true
+alertmanager:
+  enabled: true
+cadvisor:
+  enabled: true

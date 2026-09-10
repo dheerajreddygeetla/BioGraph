@@ -1,0 +1,16 @@
+apiVersion: v2
+name: biograph
+description: AI-Powered Biomedical Knowledge & Research Intelligence Platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - biograph
+  - biomedical
+  - knowledge-graph
+  - microservices
+  - ai
+maintainers:
+  - name: BioGraph Team
+    email: team@biograph.local
+dependencies: []

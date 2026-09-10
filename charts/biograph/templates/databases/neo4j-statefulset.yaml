@@ -1,0 +1,74 @@
+{{- if .Values.neo4j.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: neo4j
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "biograph.labels" . | nindent 4 }}
+    app.kubernetes.io/name: neo4j
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: neo4j
+  ports:
+    - port: 7687
+      name: bolt
+    - port: 7474
+      name: http
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: neo4j
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "biograph.labels" . | nindent 4 }}
+    app.kubernetes.io/name: neo4j
+spec:
+  serviceName: neo4j
+  replicas: {{ .Values.neo4j.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: neo4j
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: neo4j
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: neo4j
+          image: {{ .Values.neo4j.image }}
+          env:
+            - name: NEO4J_AUTH
+              value: "neo4j/{{ .Values.secrets.neo4jPassword }}"
+            - name: NEO4J_PLUGINS
+              value: '["apoc"]'
+            - name: NEO4J_dbms_memory_heap_max__size
+              value: "1G"
+          ports:
+            - containerPort: 7687
+              name: bolt
+            - containerPort: 7474
+              name: http
+          volumeMounts:
+            - name: neo4j-data
+              mountPath: /data
+          resources:
+            {{- toYaml .Values.neo4j.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 7474
+            initialDelaySeconds: 30
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: neo4j-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.neo4j.storage }}
+{{- end }}

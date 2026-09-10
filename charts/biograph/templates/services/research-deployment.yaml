@@ -1,0 +1,102 @@
+{{- if .Values.researchService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: research-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "biograph.labels" . | nindent 4 }}
+    app.kubernetes.io/name: research-service
+spec:
+  replicas: {{ .Values.researchService.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: research-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: research-service
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: research-service
+          image: "{{ .Values.researchService.image.repository }}:{{ .Values.researchService.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.researchService.port }}
+          env:
+            - name: PORT
+              value: "{{ .Values.researchService.port }}"
+            - name: SERVICE_NAME
+              value: "research-service"
+            - name: QDRANT_COLLECTION
+              value: "biograph_papers"
+            - name: EMBEDDING_PROVIDER
+              value: "local"
+            - name: EMBEDDING_MODEL
+              value: "Xenova/all-MiniLM-L6-v2"
+            - name: EMBEDDING_DIMENSION
+              value: "384"
+            - name: RERANKER_MODEL
+              value: "Xenova/ms-marco-MiniLM-L-6-v2"
+            - name: NCBI_TOOL
+              value: "biograph-research-platform"
+            - name: NCBI_EMAIL
+              value: "team@biograph.local"
+            {{- include "biograph.commonEnv" . | nindent 12 }}
+            {{- include "biograph.dbEnv" . | nindent 12 }}
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /home/nodejs/.cache/huggingface
+          resources:
+            {{- toYaml .Values.researchService.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.researchService.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.researchService.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 5
+      volumes:
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: hf-cache-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hf-cache-pvc
+  namespace: {{ .Values.global.namespace }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 3Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: research-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "biograph.labels" . | nindent 4 }}
+    app.kubernetes.io/name: research-service
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: research-service
+  ports:
+    - port: {{ .Values.researchService.port }}
+      targetPort: {{ .Values.researchService.port }}
+      name: http
+{{- end }}

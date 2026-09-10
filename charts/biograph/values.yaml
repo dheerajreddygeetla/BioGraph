@@ -1,0 +1,242 @@
+# ============================================================
+# BioGraph Helm Chart – Default Values
+# Override these in values.dev.yaml, values.prod.yaml, or
+# with --set flags during helm install/upgrade.
+# ============================================================
+
+global:
+  namespace: biograph
+  imagePullPolicy: IfNotPresent
+  environment: development
+
+# ============================================================
+# SECRETS (base64-encoded in secrets.yaml, or use --set)
+# ============================================================
+secrets:
+  jwtSecret: "your_super_secret_key_change_this_in_production"
+  qdrantApiKey: "biograph_qdrant_key"
+  neo4jPassword: "biograph123"
+  openaiApiKey: ""
+  ncbiApiKey: ""
+  slackWebhookUrl: ""
+
+# ============================================================
+# DATABASES (StatefulSets)
+# ============================================================
+mongo:
+  enabled: true
+  image: mongo:6.0
+  replicas: 1
+  storage: 5Gi
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      memory: "1Gi"
+
+redis:
+  enabled: true
+  image: redis:7-alpine
+  replicas: 1
+  storage: 2Gi
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      memory: "512Mi"
+
+neo4j:
+  enabled: true
+  image: neo4j:5-community
+  replicas: 1
+  storage: 5Gi
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      memory: "2Gi"
+
+qdrant:
+  enabled: true
+  image: qdrant/qdrant:latest
+  replicas: 1
+  storage: 5Gi
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      memory: "1Gi"
+
+# ============================================================
+# MICROSERVICES (Deployments + HPA)
+# ============================================================
+authService:
+  enabled: true
+  image:
+    repository: biograph-auth-service
+    tag: latest
+  replicas: 2
+  port: 5001
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      memory: "512Mi"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+entityService:
+  enabled: true
+  image:
+    repository: biograph-entity-service
+    tag: latest
+  replicas: 2
+  port: 5003
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      memory: "512Mi"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+researchService:
+  enabled: true
+  image:
+    repository: biograph-research-service
+    tag: latest
+  replicas: 2
+  port: 5004
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      memory: "2Gi"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 75
+
+researchWorker:
+  enabled: true
+  image:
+    repository: biograph-research-service
+    tag: latest
+  replicas: 2
+  command: ["node", "src/worker.js"]
+  metricsPort: 9101
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      memory: "2Gi"
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+gateway:
+  enabled: true
+  image:
+    repository: biograph-api-gateway
+    tag: latest
+  replicas: 2
+  port: 5000
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      memory: "512Mi"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+
+frontend:
+  enabled: true
+  image:
+    repository: biograph-frontend
+    tag: latest
+  replicas: 2
+  port: 80
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      memory: "128Mi"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 75
+
+# ============================================================
+# INGRESS
+# ============================================================
+ingress:
+  enabled: true
+  className: nginx
+  host: biograph.local
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+
+# ============================================================
+# OBSERVABILITY
+# ============================================================
+prometheus:
+  enabled: true
+  image: prom/prometheus:v2.51.0
+  storage: 5Gi
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "512Mi"
+    limits:
+      memory: "1Gi"
+
+grafana:
+  enabled: true
+  image: grafana/grafana:10.4.1
+  storage: 2Gi
+  adminPassword: "biograph_admin"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      memory: "512Mi"
+
+alertmanager:
+  enabled: true
+  image: prom/alertmanager:v0.27.0
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      memory: "256Mi"
+
+cadvisor:
+  enabled: true
+  image: gcr.io/cadvisor/cadvisor:v0.49.1

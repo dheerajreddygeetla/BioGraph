@@ -1,0 +1,57 @@
+# Development overrides – smaller resources, single replicas
+global:
+  environment: development
+
+mongo:
+  replicas: 1
+  storage: 2Gi
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      memory: "512Mi"
+
+neo4j:
+  replicas: 1
+  storage: 2Gi
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      memory: "1Gi"
+
+authService:
+  replicas: 1
+  autoscaling:
+    enabled: false
+
+entityService:
+  replicas: 1
+  autoscaling:
+    enabled: false
+
+researchService:
+  replicas: 1
+  autoscaling:
+    enabled: false
+
+gateway:
+  replicas: 1
+  autoscaling:
+    enabled: false
+
+frontend:
+  replicas: 1
+  autoscaling:
+    enabled: false
+
+prometheus:
+  enabled: false
+grafana:
+  enabled: false
+alertmanager:
+  enabled: false
+cadvisor:
+  enabled: false

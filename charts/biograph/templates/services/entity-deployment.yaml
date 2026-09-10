@@ -1,0 +1,70 @@
+{{- if .Values.entityService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: entity-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "biograph.labels" . | nindent 4 }}
+    app.kubernetes.io/name: entity-service
+spec:
+  replicas: {{ .Values.entityService.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: entity-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: entity-service
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: entity-service
+          image: "{{ .Values.entityService.image.repository }}:{{ .Values.entityService.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.entityService.port }}
+          env:
+            - name: PORT
+              value: "{{ .Values.entityService.port }}"
+            - name: SERVICE_NAME
+              value: "entity-service"
+            {{- include "biograph.commonEnv" . | nindent 12 }}
+            {{- include "biograph.dbEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.entityService.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.entityService.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.entityService.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: entity-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "biograph.labels" . | nindent 4 }}
+    app.kubernetes.io/name: entity-service
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: entity-service
+  ports:
+    - port: {{ .Values.entityService.port }}
+      targetPort: {{ .Values.entityService.port }}
+      name: http
+{{- end }}

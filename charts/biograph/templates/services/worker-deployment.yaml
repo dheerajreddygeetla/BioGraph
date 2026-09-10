@@ -1,0 +1,86 @@
+{{- if .Values.researchWorker.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: research-worker
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "biograph.labels" . | nindent 4 }}
+    app.kubernetes.io/name: research-worker
+spec:
+  replicas: {{ .Values.researchWorker.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: research-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: research-worker
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: research-worker
+          image: "{{ .Values.researchWorker.image.repository }}:{{ .Values.researchWorker.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command: {{ toJson .Values.researchWorker.command }}
+          ports:
+            - containerPort: {{ .Values.researchWorker.metricsPort }}
+              name: metrics
+          env:
+            - name: SERVICE_NAME
+              value: "research-worker"
+            - name: QDRANT_COLLECTION
+              value: "biograph_papers"
+            - name: EMBEDDING_PROVIDER
+              value: "local"
+            - name: EMBEDDING_MODEL
+              value: "Xenova/all-MiniLM-L6-v2"
+            - name: EMBEDDING_DIMENSION
+              value: "384"
+            - name: RERANKER_MODEL
+              value: "Xenova/ms-marco-MiniLM-L-6-v2"
+            - name: NCBI_TOOL
+              value: "biograph-research-platform"
+            - name: NCBI_EMAIL
+              value: "team@biograph.local"
+            {{- include "biograph.commonEnv" . | nindent 12 }}
+            {{- include "biograph.dbEnv" . | nindent 12 }}
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /home/nodejs/.cache/huggingface
+          resources:
+            {{- toYaml .Values.researchWorker.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.researchWorker.metricsPort }}
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.researchWorker.metricsPort }}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+      volumes:
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: hf-cache-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: research-worker
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "biograph.labels" . | nindent 4 }}
+    app.kubernetes.io/name: research-worker
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: research-worker
+  ports:
+    - port: {{ .Values.researchWorker.metricsPort }}
+      targetPort: {{ .Values.researchWorker.metricsPort }}
+      name: metrics
+{{- end }}
