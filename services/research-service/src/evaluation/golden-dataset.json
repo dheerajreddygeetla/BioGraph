@@ -1,0 +1,39 @@
+{
+  "name": "BioGraph Golden Dataset v1",
+  "description": "Baseline questions with expected entities, citations, and keywords for regression testing.",
+  "version": "1.0.0",
+  "testCases": [
+    {
+      "id": "brca1-drugs",
+      "question": "What drugs target proteins in the BRCA1 pathway?",
+      "entityId": "BRCA1",
+      "expectedKeywords": ["olaparib", "brca1", "protein", "pathway"],
+      "expectedCitations": ["Olaparib", "BRCA1 Protein", "Homologous Recombination Repair"],
+      "minConfidence": 0.5
+    },
+    {
+      "id": "brca1-breast-cancer",
+      "question": "How is BRCA1 associated with breast cancer?",
+      "entityId": "BRCA1",
+      "expectedKeywords": ["brca1", "breast cancer", "mutation"],
+      "expectedCitations": ["BRCA1", "Breast Cancer"],
+      "minConfidence": 0.4
+    },
+    {
+      "id": "brca1-dna-repair",
+      "question": "What is the role of BRCA1 in DNA repair?",
+      "entityId": "BRCA1",
+      "expectedKeywords": ["brca1", "dna repair", "homologous recombination"],
+      "expectedCitations": ["BRCA1 Protein", "Homologous Recombination Repair"],
+      "minConfidence": 0.4
+    },
+    {
+      "id": "olaparib-trials",
+      "question": "Which clinical trials involve Olaparib?",
+      "entityId": "Olaparib",
+      "expectedKeywords": ["olaparib", "trial", "clinical"],
+      "expectedCitations": ["Olaparib", "NCT02032823"],
+      "minConfidence": 0.3
+    }
+  ]
+}

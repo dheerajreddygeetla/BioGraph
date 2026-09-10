@@ -151,6 +151,69 @@ class Neo4jService {
       await session.close();
     }
   }
+
+  /**
+   * Multi-hop traversal.
+   * Follows a chain of relationship types starting from an entity and
+   * collects all entities of the target type encountered along the way.
+   *
+   * Example: multiHopTraversal(BRCA1_id, ['ENCODES', 'INVOLVED_IN'], 'DRUG')
+   *   → BRCA1 → BRCA1 Protein → Pathway → (find DRUGs targeting entities on this path)
+   *
+   * @param {string} entityId - Start entity ID.
+   * @param {string[]} relationChain - Array of relationship types in order.
+   * @param {string} targetType - Type of entity to find at the end.
+   * @returns {Promise<Array>} - List of { path, target } objects.
+   */
+  static async multiHopTraversal(entityId, relationChain, targetType) {
+    const session = getSession();
+    try {
+      // Build a Cypher pattern for the relation chain
+      // e.g., ['ENCODES', 'INVOLVED_IN'] → -[r0:RELATION {type:'ENCODES'}]->(n0)-[r1:RELATION {type:'INVOLVED_IN'}]->(n1)
+      let pattern = '';
+      for (let i = 0; i < relationChain.length; i++) {
+        pattern += `-[r${i}:RELATION {type: '${relationChain[i]}'}]->(n${i}:Entity)`;
+      }
+
+      const targetVar = `n${relationChain.length - 1}`;
+
+      const cypher = `
+        MATCH (start:Entity {id: $entityId})${pattern}
+        WHERE ${targetVar}.type = $targetType OR EXISTS {
+          MATCH (${targetVar})<-[:RELATION]-(t:Entity {type: $targetType})
+          RETURN t
+        }
+        OPTIONAL MATCH (drug:Entity {type: $targetType})-[:RELATION]->(${targetVar})
+        WITH start, ${targetVar} AS intermediate, drug
+        RETURN DISTINCT
+          start.name AS startName,
+          intermediate.name AS intermediateName,
+          intermediate.type AS intermediateType,
+          drug.name AS targetName
+      `;
+
+      const result = await session.run(cypher, {
+        entityId,
+        targetType,
+      });
+
+      const results = [];
+      for (const record of result.records) {
+        results.push({
+          start: record.get('startName'),
+          intermediate: record.get('intermediateName'),
+          intermediateType: record.get('intermediateType'),
+          target: record.get('targetName'),
+        });
+      }
+      return results;
+    } catch (err) {
+      console.error('   🔗 Multi-hop traversal failed:', err.message);
+      return [];
+    } finally {
+      await session.close();
+    }
+  }
 }
 
 module.exports = Neo4jService;

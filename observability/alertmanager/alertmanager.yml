@@ -1,0 +1,72 @@
+# ============================================================
+# Alertmanager configuration for BioGraph
+# Slack notifications are OPTIONAL – if SLACK_WEBHOOK_URL is
+# empty, alerts still go to the webhook-receiver for testing.
+# ============================================================
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: 'webhook-receiver'
+  group_by: ['alertname', 'service']
+  group_wait: 15s
+  group_interval: 1m
+  repeat_interval: 1h
+
+  routes:
+    # Critical alerts – if Slack is configured, send to Slack;
+    # otherwise fall through to the webhook receiver.
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 10s
+      repeat_interval: 30m
+      continue: true
+    - match:
+        severity: warning
+      receiver: 'warnings'
+      group_wait: 30s
+      repeat_interval: 2h
+    - match:
+        severity: info
+      receiver: 'info'
+      group_wait: 1m
+      repeat_interval: 6h
+
+inhibit_rules:
+  - source_matchers:
+      - severity = critical
+    target_matchers:
+      - severity = warning
+    equal: ['alertname', 'service']
+  - source_matchers:
+      - severity = critical
+    target_matchers:
+      - severity = info
+    equal: ['alertname', 'service']
+
+receivers:
+  # Webhook receiver – always active, works without Slack
+  - name: 'webhook-receiver'
+    webhook_configs:
+      - url: 'http://webhook-receiver:8080/alerts'
+        send_resolved: true
+
+  # Critical – Slack (if configured) + webhook
+  - name: 'critical-alerts'
+    webhook_configs:
+      - url: 'http://webhook-receiver:8080/alerts'
+        send_resolved: true
+
+  # Warning – Slack (if configured) + webhook
+  - name: 'warnings'
+    webhook_configs:
+      - url: 'http://webhook-receiver:8080/alerts'
+        send_resolved: true
+
+  # Info – Slack (if configured) + webhook
+  - name: 'info'
+    webhook_configs:
+      - url: 'http://webhook-receiver:8080/alerts'
+        send_resolved: false

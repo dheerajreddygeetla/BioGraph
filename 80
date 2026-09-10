@@ -1,0 +1,14 @@
+00000     0 0.1
+00000     0 0.5
+00000     0 0.9
+00000     0 10
+00000     0 100
+00000     0 2
+00000     0 5
+00000     0 50
+10350     1 80
+35254     1 docker-compose.test.yml
+46467    10 docker-compose.yml
+38622     1 package.json
+43232     1 requirements.txt
+00000     0 100

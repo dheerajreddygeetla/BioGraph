@@ -1,0 +1,252 @@
+# ============================================================
+# BioGraph Alerting Rules
+# Covers: service availability, HTTP errors, latency, queue
+# health, research pipeline, Node.js runtime, and business KPIs.
+# ============================================================
+groups:
+  # ============================================================
+  # GROUP 1: SERVICE AVAILABILITY
+  # ============================================================
+  - name: availability
+    interval: 30s
+    rules:
+      # ---- Service is down (scrape target unreachable) ----
+      - alert: ServiceDown
+        expr: up{job=~"api-gateway|auth-service|entity-service|research-service|research-worker"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.service }} is DOWN"
+          description: "Prometheus cannot scrape {{ $labels.instance }} for more than 1 minute."
+          runbook_url: "https://github.com/YOUR_USERNAME/biograph/blob/main/docs/runbooks/service-down.md"
+
+      # ---- Service restarted recently (flapping) ----
+      - alert: ServiceFlapping
+        expr: changes(process_start_time_seconds{job=~"api-gateway|auth-service|entity-service|research-service"}[15m]) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Service {{ $labels.service }} is restarting frequently"
+          description: "{{ $labels.service }} has restarted more than 2 times in 15 minutes."
+
+  # ============================================================
+  # GROUP 2: HTTP ERRORS & LATENCY (RED method)
+  # ============================================================
+  - name: http-performance
+    interval: 30s
+    rules:
+      # ---- High error rate (>5% of requests return 5xx) ----
+      - alert: HighErrorRate
+        expr: |
+          sum by (service) (rate(http_requests_total{status_code=~"5.."}[5m]))
+          /
+          sum by (service) (rate(http_requests_total[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High 5xx error rate on {{ $labels.service }}"
+          description: "{{ $labels.service }} has a 5xx error rate of {{ $value | humanizePercentage }} (threshold: 5%)."
+          runbook_url: "https://github.com/YOUR_USERNAME/biograph/blob/main/docs/runbooks/high-error-rate.md"
+
+      # ---- Elevated error rate warning (>1%) ----
+      - alert: ElevatedErrorRate
+        expr: |
+          sum by (service) (rate(http_requests_total{status_code=~"5.."}[5m]))
+          /
+          sum by (service) (rate(http_requests_total[5m]))
+          > 0.01
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated 5xx error rate on {{ $labels.service }}"
+          description: "{{ $labels.service }} error rate is {{ $value | humanizePercentage }}."
+
+      # ---- P95 latency > 1s (critical) ----
+      - alert: HighLatencyCritical
+        expr: |
+          histogram_quantile(0.95,
+            sum by (service, le) (rate(http_request_duration_seconds_bucket[5m]))
+          ) > 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "P95 latency > 1s on {{ $labels.service }}"
+          description: "{{ $labels.service }} P95 latency is {{ $value | humanizeDuration }} (threshold: 1s)."
+          runbook_url: "https://github.com/YOUR_USERNAME/biograph/blob/main/docs/runbooks/high-latency.md"
+
+      # ---- P95 latency > 500ms (warning) ----
+      - alert: HighLatencyWarning
+        expr: |
+          histogram_quantile(0.95,
+            sum by (service, le) (rate(http_request_duration_seconds_bucket[5m]))
+          ) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latency > 500ms on {{ $labels.service }}"
+          description: "{{ $labels.service }} P95 latency is {{ $value | humanizeDuration }}."
+
+      # ---- Requests in flight > 100 (potential overload) ----
+      - alert: HighInflightRequests
+        expr: sum by (service) (http_requests_in_flight) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High in-flight requests on {{ $labels.service }}"
+          description: "{{ $labels.service }} has {{ $value }} concurrent requests."
+
+  # ============================================================
+  # GROUP 3: RESEARCH PIPELINE
+  # ============================================================
+  - name: research-pipeline
+    interval: 30s
+    rules:
+      # ---- Queue depth growing (jobs piling up) ----
+      - alert: QueueBacklogWarning
+        expr: queue_jobs_waiting > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: research-worker
+        annotations:
+          summary: "Research queue backlog growing"
+          description: "{{ $value }} jobs are waiting in the queue (threshold: 10)."
+          runbook_url: "https://github.com/YOUR_USERNAME/biograph/blob/main/docs/runbooks/queue-backlog.md"
+
+      # ---- Queue depth critical (>50 jobs) ----
+      - alert: QueueBacklogCritical
+        expr: queue_jobs_waiting > 50
+        for: 3m
+        labels:
+          severity: critical
+          service: research-worker
+        annotations:
+          summary: "Research queue backlog CRITICAL"
+          description: "{{ $value }} jobs waiting – worker may be stuck or down."
+
+      # ---- High research job failure rate (>20%) ----
+      - alert: HighResearchJobFailureRate
+        expr: |
+          sum(rate(research_jobs_total{status="failed"}[10m]))
+          /
+          sum(rate(research_jobs_total[10m]))
+          > 0.2
+        for: 10m
+        labels:
+          severity: critical
+          service: research-service
+        annotations:
+          summary: "Research job failure rate > 20%"
+          description: "{{ $value | humanizePercentage }} of research jobs are failing."
+          runbook_url: "https://github.com/YOUR_USERNAME/biograph/blob/main/docs/runbooks/research-failures.md"
+
+      # ---- Research job duration P95 > 60s ----
+      - alert: SlowResearchJobs
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(research_job_duration_seconds_bucket[10m]))
+          ) > 60
+        for: 5m
+        labels:
+          severity: warning
+          service: research-worker
+        annotations:
+          summary: "Research jobs taking > 60s at P95"
+          description: "P95 research job duration is {{ $value | humanizeDuration }}."
+
+      # ---- Agent step failures ----
+      - alert: AgentStepFailure
+        expr: |
+          sum by (agent) (rate(agent_step_total{status="failed"}[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: research-worker
+        annotations:
+          summary: "Agent {{ $labels.agent }} failing"
+          description: "Agent {{ $labels.agent }} has a failure rate of {{ $value }}/s."
+
+  # ============================================================
+  # GROUP 4: NODE.JS RUNTIME
+  # ============================================================
+  - name: nodejs-runtime
+    interval: 30s
+    rules:
+      # ---- Event loop lag > 100ms ----
+      - alert: HighEventLoopLag
+        expr: nodejs_eventloop_lag_seconds > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High event loop lag on {{ $labels.service }}"
+          description: "{{ $labels.service }} event loop lag is {{ $value | humanizeDuration }} (threshold: 100ms)."
+          runbook_url: "https://github.com/YOUR_USERNAME/biograph/blob/main/docs/runbooks/event-loop-lag.md"
+
+      # ---- Event loop lag > 500ms (critical) ----
+      - alert: CriticalEventLoopLag
+        expr: nodejs_eventloop_lag_seconds > 0.5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CRITICAL event loop lag on {{ $labels.service }}"
+          description: "{{ $labels.service }} event loop lag is {{ $value | humanizeDuration }}."
+
+      # ---- Heap usage > 90% of max ----
+      - alert: HighHeapUsage
+        expr: |
+          nodejs_heap_size_used_bytes / nodejs_heap_size_total_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High heap usage on {{ $labels.service }}"
+          description: "{{ $labels.service }} heap is {{ $value | humanizePercentage }} full."
+
+      # ---- Active handles growing (potential leak) ----
+      - alert: HandleLeak
+        expr: |
+          deriv(nodejs_active_handles_total[10m]) > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Potential handle leak on {{ $labels.service }}"
+          description: "Active handles are growing at {{ $value }}/s."
+
+  # ============================================================
+  # GROUP 5: INFRASTRUCTURE (container metrics via cAdvisor)
+  # ============================================================
+  - name: infrastructure
+    interval: 30s
+    rules:
+      # ---- Container CPU > 80% ----
+      - alert: HighContainerCPU
+        expr: |
+          sum by (name) (rate(container_cpu_usage_seconds_total{name=~"biograph-.*"}[5m])) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU on {{ $labels.name }}"
+          description: "Container {{ $labels.name }} CPU usage is {{ $value }}%."
+
+      # ---- Container memory > 1.5 GB ----
+      - alert: HighContainerMemory
+        expr: |
+          sum by (name) (container_memory_usage_bytes{name=~"biograph-.*"}) > 1500000000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory on {{ $labels.name }}"
+          description: "Container {{ $labels.name }} uses {{ $value | humanize1024 }}B."

@@ -190,7 +190,7 @@ services:
       EMBEDDING_PROVIDER: local
       EMBEDDING_MODEL: Xenova/all-MiniLM-L6-v2
       EMBEDDING_DIMENSION: 384
-      RERANKER_MODEL: Xenova/ms-marco-MiniLM-L-6-v2
+      RERANKER_MODEL: Xenova/ms-marco-MiniLM-L6-v2
       NCBI_TOOL: biograph-research-platform
       NCBI_EMAIL: your.email@example.com
       JWT_SECRET: your_super_secret_key_change_this_in_production
@@ -238,9 +238,6 @@ services:
     networks:
       - biograph_net
 
-  # ============================================================
-  # FRONTEND
-  # ============================================================
   frontend:
     build:
       context: ./frontend
@@ -266,14 +263,42 @@ services:
       - "9090:9090"
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=30d'
       - '--web.enable-lifecycle'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
+    depends_on:
+      - alertmanager
+    networks:
+      - biograph_net
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: biograph-alertmanager
+    restart: unless-stopped
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+    networks:
+      - biograph_net
+
+  webhook-receiver:
+    build:
+      context: ./observability/webhook-receiver
+      dockerfile: Dockerfile
+    container_name: biograph-webhook-receiver
+    restart: unless-stopped
+    ports:
+      - "8082:8080"
     networks:
       - biograph_net
 
@@ -287,7 +312,6 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: biograph_admin
       GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_INSTALL_PLUGINS: ""
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/biograph-overview.json
     volumes:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -325,6 +349,7 @@ volumes:
   hf_cache:
   prometheus_data:
   grafana_data:
+  alertmanager_data:
 
 networks:
   biograph_net:
