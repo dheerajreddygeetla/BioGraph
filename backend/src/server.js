@@ -60,7 +60,7 @@ app.use(errorHandler);
 // ============================================================
 // STARTUP – Connect to all databases, then listen
 // ============================================================
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5002;
 
 const startServer = async () => {
   try {

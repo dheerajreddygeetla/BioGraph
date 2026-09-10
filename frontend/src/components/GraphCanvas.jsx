@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import ReactFlow, {
   MiniMap,
   Controls,
@@ -9,9 +9,6 @@ import ReactFlow, {
   MarkerType,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-
-// Custom node style (optional)
-const nodeTypes = {};
 
 const GraphCanvas = ({ nodes: initialNodes, edges: initialEdges, onNodeClick }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);

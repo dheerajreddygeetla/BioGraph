@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 const AdminDashboard = () => {
@@ -7,37 +7,38 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    fetchMetrics();
-    fetchLogs();
-  }, []);
-
-  const fetchMetrics = async () => {
+  const fetchMetrics = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
-      const { data } = await axios.get('http://localhost:5000/api/admin/metrics', {
+      const { data } = await axios.get('/api/admin/metrics', {
         headers: { Authorization: `Bearer ${token}` },
       });
       setMetrics(data);
     } catch (err) {
       setError('Failed to load metrics. Ensure you are admin.');
       console.error(err);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
-      const { data } = await axios.get('http://localhost:5000/api/admin/logs?limit=20', {
+      const { data } = await axios.get('/api/admin/logs?limit=20', {
         headers: { Authorization: `Bearer ${token}` },
       });
       setLogs(data);
     } catch (err) {
       console.error(err);
-    } finally {
-      setLoading(false);
     }
-  };
+  }, []);
+
+  // Fetch metrics and logs on mount
+  useEffect(() => {
+    fetchMetrics();
+    fetchLogs();
+  }, [fetchMetrics, fetchLogs]);
 
   if (loading) return <div className="p-4">Loading admin dashboard...</div>;
   if (error) return <div className="p-4 text-red-600">{error}</div>;

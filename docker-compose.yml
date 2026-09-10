@@ -218,9 +218,9 @@ services:
     container_name: biograph-gateway
     restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "5002:5002"
     environment:
-      PORT: 5000
+      PORT: 5002
       SERVICE_NAME: api-gateway
       LOG_LEVEL: info
       MONOLITH_URL: http://entity-service:5003

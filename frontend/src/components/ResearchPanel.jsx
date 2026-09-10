@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import AgentSteps from './AgentSteps';
 
@@ -7,32 +7,32 @@ const ResearchPanel = ({ selectedEntity }) => {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
-  const [jobId, setJobId] = useState(null);
+  const [, setJobId] = useState(null);
   const [steps, setSteps] = useState([]);
   const [savedSessions, setSavedSessions] = useState([]);
 
-  // Fetch saved sessions on mount
-  useEffect(() => {
-    fetchSavedSessions();
-  }, []);
-
-  const fetchSavedSessions = async () => {
+  const fetchSavedSessions = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
-      const { data } = await axios.get('http://localhost:5000/api/research/saved', {
+      const { data } = await axios.get('/api/research/saved', {
         headers: { Authorization: `Bearer ${token}` },
       });
       setSavedSessions(data);
     } catch (err) {
       console.error('Failed to fetch saved sessions:', err);
     }
-  };
+  }, []);
+
+  // Fetch saved sessions on mount
+  useEffect(() => {
+    fetchSavedSessions();
+  }, [fetchSavedSessions]);
 
   const pollJobStatus = async (id) => {
     try {
       const token = localStorage.getItem('token');
       const { data } = await axios.get(
-        `http://localhost:5000/api/research/status/${id}`,
+        `/api/research/status/${id}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (data.state === 'completed') {
@@ -76,7 +76,7 @@ const ResearchPanel = ({ selectedEntity }) => {
     try {
       const token = localStorage.getItem('token');
       const { data } = await axios.post(
-        'http://localhost:5000/api/research/query',
+        '/api/research/query',
         {
           question: question.trim(),
           entityId: selectedEntity.id,
@@ -98,7 +98,7 @@ const ResearchPanel = ({ selectedEntity }) => {
     try {
       const token = localStorage.getItem('token');
       await axios.post(
-        'http://localhost:5000/api/research/save',
+        '/api/research/save',
         {
           question,
           answer: result.answer,

@@ -1,4 +1,3 @@
-import React from 'react';
 
 const AgentSteps = ({ steps }) => {
   if (!steps || steps.length === 0) {

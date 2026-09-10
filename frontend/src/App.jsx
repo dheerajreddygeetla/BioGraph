@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Routes, Route, Link, Navigate } from 'react-router-dom';
 import Login from './components/Login';
 import Register from './components/Register';
@@ -6,29 +6,17 @@ import Workspace from './pages/Workspace';
 import AdminDashboard from './pages/AdminDashboard'; // NEW
 
 function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
+  const [user, setUser] = useState(() => {
     const token = localStorage.getItem('token');
-    if (token) {
-      const storedUser = localStorage.getItem('user');
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
-      }
-    }
-    setLoading(false);
-  }, []);
+    const storedUser = localStorage.getItem('user');
+    return token && storedUser ? JSON.parse(storedUser) : null;
+  });
 
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
   };
-
-  if (loading) {
-    return <div className="flex items-center justify-center h-screen">Loading...</div>;
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">

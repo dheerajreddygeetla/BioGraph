@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import axios from 'axios';
 import SearchBar from '../components/SearchBar';
 import GraphCanvas from '../components/GraphCanvas';
@@ -16,7 +16,7 @@ const Workspace = () => {
     setError('');
     try {
       const token = localStorage.getItem('token');
-      const { data } = await axios.get(`http://localhost:5000/api/graph/${entityId}?depth=2`, {
+      const { data } = await axios.get(`/api/graph/${entityId}?depth=2`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setGraphData(data);

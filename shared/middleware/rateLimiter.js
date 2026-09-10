@@ -5,6 +5,7 @@ const generalLimiter = rateLimit({
   max: 500,
   standardHeaders: true,
   legacyHeaders: false,
+  skipFailedRequests: true,
   message: { message: 'Too many requests, please try again later.' },
 });
 

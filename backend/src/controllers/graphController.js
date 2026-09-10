@@ -42,7 +42,19 @@ const searchGraph = async (req, res, next) => {
       .sort({ score: { $meta: 'textScore' } })
       .limit(10);
 
-    res.json(entities);
+    // Deduplicate results by _id to prevent duplicates from name + alias matches
+    const uniqueEntities = [];
+    const seenIds = new Set();
+    
+    for (const entity of entities) {
+      const idStr = entity._id.toString();
+      if (!seenIds.has(idStr)) {
+        seenIds.add(idStr);
+        uniqueEntities.push(entity);
+      }
+    }
+
+    res.json(uniqueEntities);
   } catch (error) {
     next(error);
   }
@@ -71,7 +83,30 @@ const getShortestPath = async (req, res, next) => {
     const { from, to } = req.query;
     if (!from || !to) return res.status(400).json({ message: 'from and to required' });
 
-    const path = await Neo4jService.shortestPath(from, to);
+    // Resolve names to entity IDs if needed
+    const fromIsObjectId = /^[0-9a-fA-F]{24}$/.test(from);
+    const toIsObjectId = /^[0-9a-fA-F]{24}$/.test(to);
+    
+    let fromId = from;
+    let toId = to;
+    
+    if (!fromIsObjectId) {
+      const fromEntity = await Entity.findOne({
+        name: { $regex: new RegExp(`^${from}$`, 'i') },
+      });
+      if (!fromEntity) return res.status(404).json({ message: 'Source entity not found' });
+      fromId = fromEntity._id.toString();
+    }
+    
+    if (!toIsObjectId) {
+      const toEntity = await Entity.findOne({
+        name: { $regex: new RegExp(`^${to}$`, 'i') },
+      });
+      if (!toEntity) return res.status(404).json({ message: 'Target entity not found' });
+      toId = toEntity._id.toString();
+    }
+
+    const path = await Neo4jService.shortestPath(fromId, toId);
     if (!path) return res.status(404).json({ message: 'No path found' });
     res.json(path);
   } catch (error) {

@@ -1,5 +1,4 @@
 const Neo4jService = require('../services/neo4jService');
-const Entity = require('../models/Entity');
 
 // @desc    Get graph around an entity (Neo4j-powered)
 // @route   GET /api/graph/:identifier?depth=2
@@ -12,11 +11,9 @@ const getGraph = async (req, res, next) => {
     const isObjectId = /^[0-9a-fA-F]{24}$/.test(identifier);
     let entityId = identifier;
     if (!isObjectId) {
-      const entity = await Entity.findOne({
-        name: { $regex: new RegExp(`^${identifier}$`, 'i') },
-      });
+      const entity = await Neo4jService.findEntityByName(identifier);
       if (!entity) return res.status(404).json({ message: 'Entity not found' });
-      entityId = entity._id.toString();
+      entityId = entity.id;
     }
 
     const graph = await Neo4jService.getGraph(entityId, depth);
@@ -34,13 +31,7 @@ const searchGraph = async (req, res, next) => {
     const { q } = req.query;
     if (!q) return res.status(400).json({ message: 'Query parameter "q" is required' });
 
-    const entities = await Entity.find(
-      { $text: { $search: q } },
-      { score: { $meta: 'textScore' } }
-    )
-      .sort({ score: { $meta: 'textScore' } })
-      .limit(10);
-
+    const entities = await Neo4jService.searchEntities(q);
     res.json(entities);
   } catch (error) {
     next(error);
@@ -70,7 +61,26 @@ const getShortestPath = async (req, res, next) => {
     const { from, to } = req.query;
     if (!from || !to) return res.status(400).json({ message: 'from and to required' });
 
-    const path = await Neo4jService.shortestPath(from, to);
+    // Resolve names to entity IDs if needed
+    const fromIsObjectId = /^[0-9a-fA-F]{24}$/.test(from);
+    const toIsObjectId = /^[0-9a-fA-F]{24}$/.test(to);
+    
+    let fromId = from;
+    let toId = to;
+    
+    if (!fromIsObjectId) {
+      const fromEntity = await Neo4jService.findEntityByName(from);
+      if (!fromEntity) return res.status(404).json({ message: 'Source entity not found' });
+      fromId = fromEntity.id;
+    }
+    
+    if (!toIsObjectId) {
+      const toEntity = await Neo4jService.findEntityByName(to);
+      if (!toEntity) return res.status(404).json({ message: 'Target entity not found' });
+      toId = toEntity.id;
+    }
+
+    const path = await Neo4jService.shortestPath(fromId, toId);
     if (!path) return res.status(404).json({ message: 'No path found' });
     res.json(path);
   } catch (error) {

@@ -1,6 +1,52 @@
 const { getSession } = require('../config/neo4j');
 
 class Neo4jService {
+  static async findEntityByName(name) {
+    const session = getSession();
+    try {
+      const result = await session.run(
+        `MATCH (e:Entity) WHERE e.name = $name RETURN e`,
+        { name }
+      );
+      if (result.records.length === 0) return null;
+      const node = result.records[0].get('e');
+      return {
+        id: node.properties.id,
+        name: node.properties.name,
+        type: node.properties.type,
+        description: node.properties.description,
+      };
+    } finally {
+      await session.close();
+    }
+  }
+
+  static async searchEntities(query) {
+    const session = getSession();
+    try {
+      const result = await session.run(
+        `MATCH (e:Entity)
+         WHERE e.name CONTAINS $query OR any(alias IN e.aliases WHERE alias CONTAINS $query)
+         RETURN e
+         LIMIT 10`,
+        { query }
+      );
+      return result.records.map(record => {
+        const node = record.get('e');
+        return {
+          _id: node.properties.id,
+          id: node.properties.id,
+          name: node.properties.name,
+          type: node.properties.type,
+          description: node.properties.description,
+          aliases: node.properties.aliases || [],
+        };
+      });
+    } finally {
+      await session.close();
+    }
+  }
+
   static async upsertEntity(entity) {
     const session = getSession();
     try {

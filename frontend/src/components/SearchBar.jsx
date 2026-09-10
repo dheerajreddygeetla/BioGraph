@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import axios from 'axios';
 
 const SearchBar = ({ onSearch }) => {
@@ -17,10 +17,20 @@ const SearchBar = ({ onSearch }) => {
     try {
       const token = localStorage.getItem('token');
       const { data } = await axios.get(
-        `http://localhost:5000/api/graph/search?q=${encodeURIComponent(value)}`,
+        `/api/graph/search?q=${encodeURIComponent(value)}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setSuggestions(data);
+      // Deduplicate suggestions by _id to prevent duplicates
+      const uniqueSuggestions = [];
+      const seenIds = new Set();
+      for (const entity of data) {
+        const idStr = entity._id?.toString();
+        if (idStr && !seenIds.has(idStr)) {
+          seenIds.add(idStr);
+          uniqueSuggestions.push(entity);
+        }
+      }
+      setSuggestions(uniqueSuggestions);
     } catch (err) {
       console.error(err);
       setSuggestions([]);
@@ -66,7 +76,7 @@ const SearchBar = ({ onSearch }) => {
         <ul className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto z-20">
           {suggestions.map((entity) => (
             <li
-              key={entity._id}
+              key={entity._id?.toString() || entity.name}
               className="px-4 py-2 hover:bg-blue-50 cursor-pointer flex items-center justify-between"
               onClick={() => handleSelect(entity)}
             >

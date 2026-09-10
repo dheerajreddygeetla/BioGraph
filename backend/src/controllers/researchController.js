@@ -22,7 +22,6 @@ const researchQuery = async (req, res, next) => {
       message: 'Research job queued.',
     });
   } catch (error) {
-    console.error('Queue error:', error.message);
     next(error);
   }
 };

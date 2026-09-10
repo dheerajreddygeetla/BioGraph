@@ -17,6 +17,9 @@ const { generalLimiter } = middleware.rateLimiter;
 
 const app = express();
 
+// Trust proxy for rate limiting behind API gateway
+app.set('trust proxy', true);
+
 // ============================================================
 // METRICS
 // ============================================================

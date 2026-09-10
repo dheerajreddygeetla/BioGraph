@@ -13,11 +13,11 @@ After running `docker compose up -d`, open these in your browser:
 
 ## API Gateway (for curl / Postman)
 
-- Health:     http://localhost:5000/health
-- Auth:       http://localhost:5000/api/auth/login
-- Entities:   http://localhost:5000/api/entities
-- Graph:      http://localhost:5000/api/graph/BRCA1
-- Research:   http://localhost:5000/api/research/query
+- Health:     http://localhost:5002/health
+- Auth:       http://localhost:5002/api/auth/login
+- Entities:   http://localhost:5002/api/entities
+- Graph:      http://localhost:5002/api/graph/BRCA1
+- Research:   http://localhost:5002/api/research/query
 
 ## Container Commands
 
