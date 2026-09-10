@@ -1,0 +1,256 @@
+# ============================================================
+# BioGraph CI Pipeline
+# Runs on every push and PR: lint, test, security scan,
+# build images, run integration tests.
+# ============================================================
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/biograph
+
+jobs:
+  # ============================================================
+  # JOB 1: Lint & Test (matrix across services)
+  # ============================================================
+  lint-and-test:
+    name: Lint & Test – ${{ matrix.service }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - shared
+          - services/api-gateway
+          - services/auth-service
+          - services/entity-service
+          - services/research-service
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ matrix.service }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.service }}
+        run: npm ci --ignore-scripts
+
+      - name: Run tests (if present)
+        working-directory: ${{ matrix.service }}
+        run: npm test --if-present
+
+  # ============================================================
+  # JOB 2: Security Scan
+  # ============================================================
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run npm audit (all services)
+        run: |
+          set -e
+          for dir in shared services/api-gateway services/auth-service services/entity-service services/research-service; do
+            echo "::group::Audit $dir"
+            cd $dir
+            npm install --package-lock-only --ignore-scripts
+            npm audit --audit-level=high || echo "::warning::Vulnerabilities found in $dir"
+            cd -
+            echo "::endgroup::"
+          done
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: trivy
+
+  # ============================================================
+  # JOB 3: Build & Push Docker Images (matrix)
+  # ============================================================
+  build-and-push:
+    name: Build & Push – ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    needs: security-scan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api-gateway
+            dockerfile: services/api-gateway/Dockerfile
+          - image: auth-service
+            dockerfile: services/auth-service/Dockerfile
+          - image: entity-service
+            dockerfile: services/entity-service/Dockerfile
+          - image: research-service
+            dockerfile: services/research-service/Dockerfile
+          - image: frontend
+            dockerfile: frontend/Dockerfile
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.image }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  # ============================================================
+  # JOB 4: Integration Test (full docker compose stack)
+  # ============================================================
+  integration-test:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create .env files for services
+        run: |
+          for svc in auth-service entity-service research-service api-gateway; do
+            if [ -f "services/$svc/.env.example" ]; then
+              cp "services/$svc/.env.example" "services/$svc/.env"
+            fi
+          done
+
+      - name: Build all images
+        run: docker compose build
+
+      - name: Start the full stack
+        run: docker compose up -d --wait --wait-timeout 120
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for services..."
+          sleep 15
+          docker compose ps
+
+      - name: Test /health endpoints
+        run: |
+          set -e
+          for port in 5000 5001 5003 5004; do
+            echo "Testing port $port..."
+            curl -sf "http://localhost:$port/health" | head -c 200
+            echo
+          done
+          echo "✅ All health checks passed"
+
+      - name: Test gateway proxies to auth
+        run: |
+          curl -sf -X POST http://localhost:5000/api/auth/register \
+            -H "Content-Type: application/json" \
+            -d '{"name":"CI Test","email":"ci-'$RANDOM'@example.com","password":"test1234"}' \
+            | head -c 300
+          echo
+          echo "✅ Gateway → auth-service works"
+
+      - name: Test gateway proxies to entity service
+        run: |
+          curl -sf "http://localhost:5000/api/graph/search?q=BRCA1" | head -c 300
+          echo
+          echo "✅ Gateway → entity-service works"
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --tail=100
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
+  # ============================================================
+  # JOB 5: Deploy (manual trigger, main branch only)
+  # ============================================================
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: integration-test
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH || '/opt/biograph' }}
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker compose ps
+            echo "✅ Deployment complete at $(date)"

@@ -6,7 +6,7 @@ const helmet = require('helmet');
 const connectDB = require('./config/db');
 const { verifyConnectivity: verifyNeo4j } = require('./config/neo4j');
 const errorHandler = require('./middleware/errorHandler');
-const { middleware, utils } = require('@biograph/shared');
+const { middleware, utils, metrics: sharedMetrics } = require('@biograph/shared');
 
 const entityRoutes = require('./routes/entityRoutes');
 const relationshipRoutes = require('./routes/relationshipRoutes');
@@ -16,6 +16,12 @@ const logger = utils.logger;
 const { generalLimiter } = middleware.rateLimiter;
 
 const app = express();
+
+// ============================================================
+// METRICS
+// ============================================================
+const metrics = sharedMetrics.createMetrics('entity-service');
+app.use(sharedMetrics.metricsMiddleware(metrics));
 
 // ============================================================
 // MIDDLEWARE
@@ -32,7 +38,6 @@ app.use('/api/entities', entityRoutes);
 app.use('/api/relationships', relationshipRoutes);
 app.use('/api/graph', graphRoutes);
 
-// Health check
 app.get('/health', (req, res) => {
   res.json({
     status: 'OK',
@@ -42,7 +47,11 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Error handler (last)
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', metrics.register.contentType);
+  res.end(await metrics.register.metrics());
+});
+
 app.use(errorHandler);
 
 // ============================================================

@@ -6,4 +6,5 @@ module.exports = {
   utils: {
     logger: require('./utils/logger'),
   },
+  metrics: require('./metrics'),
 };

@@ -1,0 +1,25 @@
+{
+  "name": "biograph",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BioGraph – AI-Powered Biomedical Research Intelligence Platform",
+  "workspaces": [
+    "shared",
+    "backend",
+    "services/*",
+    "frontend"
+  ],
+  "scripts": {
+    "lint": "echo 'Linting runs per service in CI matrix'",
+    "test": "echo 'Tests run per service in CI matrix'",
+    "build": "echo 'Builds run per service in CI matrix'",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

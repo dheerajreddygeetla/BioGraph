@@ -1,0 +1,73 @@
+# ============================================================
+# Prometheus configuration for BioGraph microservices
+# ============================================================
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'biograph'
+    environment: 'development'
+
+# ============================================================
+# Scrape configs – one job per service
+# ============================================================
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # API Gateway
+  - job_name: 'api-gateway'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['api-gateway:5000']
+        labels:
+          service: 'api-gateway'
+          tier: 'edge'
+
+  # Auth Service
+  - job_name: 'auth-service'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['auth-service:5001']
+        labels:
+          service: 'auth-service'
+          tier: 'core'
+
+  # Entity Service
+  - job_name: 'entity-service'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['entity-service:5003']
+        labels:
+          service: 'entity-service'
+          tier: 'core'
+
+  # Research Service
+  - job_name: 'research-service'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['research-service:5004']
+        labels:
+          service: 'research-service'
+          tier: 'core'
+
+  # Research Worker (exposes metrics on a separate port)
+  - job_name: 'research-worker'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['research-worker:9101']
+        labels:
+          service: 'research-worker'
+          tier: 'worker'
+
+  # cAdvisor – container CPU/memory/network metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          service: 'cadvisor'
+          tier: 'infra'

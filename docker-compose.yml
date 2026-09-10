@@ -223,7 +223,6 @@ services:
       PORT: 5000
       SERVICE_NAME: api-gateway
       LOG_LEVEL: info
-      # In Docker, all service hostnames resolve on the shared network
       MONOLITH_URL: http://entity-service:5003
       AUTH_SERVICE_URL: http://auth-service:5001
       ENTITY_SERVICE_URL: http://entity-service:5003
@@ -256,6 +255,67 @@ services:
     networks:
       - biograph_net
 
+  # ============================================================
+  # OBSERVABILITY
+  # ============================================================
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: biograph-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - biograph_net
+
+  grafana:
+    image: grafana/grafana:10.4.1
+    container_name: biograph-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: biograph_admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: ""
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/biograph-overview.json
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - biograph_net
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: biograph-cadvisor
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+    networks:
+      - biograph_net
+
 volumes:
   mongo_data:
   redis_data:
@@ -263,6 +323,8 @@ volumes:
   neo4j_logs:
   qdrant_data:
   hf_cache:
+  prometheus_data:
+  grafana_data:
 
 networks:
   biograph_net:

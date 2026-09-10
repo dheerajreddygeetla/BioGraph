@@ -5,7 +5,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const connectDB = require('./config/db');
 const errorHandler = require('./middleware/errorHandler');
-const { middleware, utils } = require('@biograph/shared');
+const { middleware, utils, metrics: sharedMetrics } = require('@biograph/shared');
 
 const authRoutes = require('./routes/authRoutes');
 
@@ -15,13 +15,17 @@ const { generalLimiter, authLimiter } = middleware.rateLimiter;
 const app = express();
 
 // ============================================================
+// METRICS
+// ============================================================
+const metrics = sharedMetrics.createMetrics('auth-service');
+app.use(sharedMetrics.metricsMiddleware(metrics));
+
+// ============================================================
 // MIDDLEWARE
 // ============================================================
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
-
-// Rate limiting: stricter on auth endpoints
 app.use(generalLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
@@ -31,7 +35,6 @@ app.use('/api/auth/register', authLimiter);
 // ============================================================
 app.use('/api/auth', authRoutes);
 
-// Health check
 app.get('/health', (req, res) => {
   res.json({
     status: 'OK',
@@ -41,7 +44,11 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Error handler (last)
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', metrics.register.contentType);
+  res.end(await metrics.register.metrics());
+});
+
 app.use(errorHandler);
 
 // ============================================================

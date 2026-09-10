@@ -1,0 +1,32 @@
+# ============================================================
+# Test overrides for CI integration testing.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.test.yml up -d
+# ============================================================
+services:
+  mongo:
+    ports: []   # don't expose to host in tests
+  redis:
+    ports: []
+  neo4j:
+    ports: []
+  qdrant:
+    ports: []
+
+  research-service:
+    environment:
+      # Use 'hash' embeddings to avoid downloading the 50MB model in CI
+      EMBEDDING_PROVIDER: hash
+      EMBEDDING_DIMENSION: 384
+
+  research-worker:
+    environment:
+      EMBEDDING_PROVIDER: hash
+      EMBEDDING_DIMENSION: 384
+
+  # Disable observability in tests (faster)
+  prometheus:
+    profiles: ['observability']
+  grafana:
+    profiles: ['observability']
+  cadvisor:
+    profiles: ['observability']

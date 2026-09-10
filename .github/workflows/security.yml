@@ -1,0 +1,166 @@
+# ============================================================
+# BioGraph Security – Dependency, container, and code scanning
+# Triggers: push to main, PRs, weekly schedule
+# ============================================================
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 3 * * 1'   # Every Monday at 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # ============================================================
+  # JOB 1 – npm audit across all services
+  # ============================================================
+  npm-audit:
+    name: npm audit (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - shared
+          - backend
+          - services/auth-service
+          - services/entity-service
+          - services/research-service
+          - services/api-gateway
+          - frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run npm audit
+        working-directory: ${{ matrix.service }}
+        run: |
+          echo "🔍 Auditing ${{ matrix.service }}..."
+          npm audit --audit-level=high --production 2>&1 | tee audit-output.txt
+          if grep -q "found 0 vulnerabilities" audit-output.txt; then
+            echo "✅ No vulnerabilities found"
+          else
+            echo "⚠️  Vulnerabilities detected – review above"
+          fi
+        continue-on-error: true
+
+  # ============================================================
+  # JOB 2 – Trivy filesystem scan (dependencies + secrets)
+  # ============================================================
+  trivy-fs:
+    name: Trivy Filesystem Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner (filesystem)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-fs-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+      - name: Upload Trivy FS results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-fs-results.sarif'
+          category: 'trivy-fs'
+
+  # ============================================================
+  # JOB 3 – Trivy container scan (build + scan each image)
+  # ============================================================
+  trivy-containers:
+    name: Trivy Container Scan (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api-gateway
+            dockerfile: services/api-gateway/Dockerfile
+          - image: auth-service
+            dockerfile: services/auth-service/Dockerfile
+          - image: entity-service
+            dockerfile: services/entity-service/Dockerfile
+          - image: research-service
+            dockerfile: services/research-service/Dockerfile
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: false
+          load: true
+          tags: biograph-${{ matrix.image }}:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy container scan
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: 'image'
+          image-ref: 'biograph-${{ matrix.image }}:scan'
+          format: 'sarif'
+          output: 'trivy-${{ matrix.image }}.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+      - name: Upload container scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-${{ matrix.image }}.sarif'
+          category: 'trivy-${{ matrix.image }}'
+
+  # ============================================================
+  # JOB 4 – CodeQL static analysis (JavaScript)
+  # ============================================================
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript'

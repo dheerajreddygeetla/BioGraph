@@ -6,7 +6,7 @@ const helmet = require('helmet');
 const connectDB = require('./config/db');
 const { verifyConnectivity: verifyNeo4j } = require('./config/neo4j');
 const errorHandler = require('./middleware/errorHandler');
-const { middleware, utils } = require('@biograph/shared');
+const { middleware, utils, metrics: sharedMetrics } = require('@biograph/shared');
 
 const researchRoutes = require('./routes/researchRoutes');
 const vectorRoutes = require('./routes/vectorRoutes');
@@ -16,18 +16,27 @@ const { generalLimiter, researchLimiter } = middleware.rateLimiter;
 
 const app = express();
 
-// Middleware
+// ============================================================
+// METRICS
+// ============================================================
+const metrics = sharedMetrics.createMetrics('research-service');
+app.use(sharedMetrics.metricsMiddleware(metrics));
+
+// ============================================================
+// MIDDLEWARE
+// ============================================================
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
 app.use(generalLimiter);
 app.use('/api/research', researchLimiter);
 
-// Routes
+// ============================================================
+// ROUTES
+// ============================================================
 app.use('/api/research', researchRoutes);
 app.use('/api/vector', vectorRoutes);
 
-// Health
 app.get('/health', (req, res) => {
   res.json({
     status: 'OK',
@@ -37,10 +46,16 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Error handler
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', metrics.register.contentType);
+  res.end(await metrics.register.metrics());
+});
+
 app.use(errorHandler);
 
-// Start
+// ============================================================
+// START
+// ============================================================
 const PORT = process.env.PORT || 5004;
 
 const start = async () => {
@@ -48,7 +63,6 @@ const start = async () => {
     await connectDB();
     await verifyNeo4j();
 
-    // Initialize Qdrant collection + migrations
     try {
       const SchemaMigration = require('./services/schemaMigration');
       await SchemaMigration.migrate();

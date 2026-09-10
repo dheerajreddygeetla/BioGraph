@@ -3,10 +3,16 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const { createProxyMiddleware } = require('http-proxy-middleware');
-const { utils } = require('@biograph/shared');
+const { utils, metrics: sharedMetrics } = require('@biograph/shared');
 
 const logger = utils.logger;
 const app = express();
+
+// ============================================================
+// METRICS – initialize before anything else
+// ============================================================
+const metrics = sharedMetrics.createMetrics('api-gateway');
+app.use(sharedMetrics.metricsMiddleware(metrics));
 
 // ============================================================
 // MIDDLEWARE
@@ -16,35 +22,23 @@ app.use(cors());
 
 // ============================================================
 // SERVICE REGISTRY
-// Each service is addressed by hostname. During migration,
-// all traffic goes to the monolith. As services are extracted,
-// update these URLs to point to the new services.
 // ============================================================
 const SERVICES = {
-  // The monolith runs on 5001 (moved from 5000 to make room for gateway)
-  monolith: process.env.MONOLITH_URL || 'http://localhost:5001',
-
-  // Will be enabled in Phase 3b:
+  monolith: process.env.MONOLITH_URL || 'http://localhost:5002',
   auth: process.env.AUTH_SERVICE_URL || null,
-
-  // Will be enabled in Phase 3c:
   entity: process.env.ENTITY_SERVICE_URL || null,
-
-  // Will be enabled in Phase 3d:
   research: process.env.RESEARCH_SERVICE_URL || null,
 };
 
 logger.info('Gateway service registry:', SERVICES);
 
 // ============================================================
-// HELPER: pick target based on route
+// TARGET RESOLVER
 // ============================================================
 function targetFor(path) {
-  // Auth service
   if (SERVICES.auth && path.startsWith('/api/auth')) {
     return { url: SERVICES.auth, name: 'auth-service' };
   }
-  // Entity service (entities, relationships, graph)
   if (
     SERVICES.entity &&
     (path.startsWith('/api/entities') ||
@@ -53,23 +47,21 @@ function targetFor(path) {
   ) {
     return { url: SERVICES.entity, name: 'entity-service' };
   }
-  // Research service
   if (
     SERVICES.research &&
     (path.startsWith('/api/research') || path.startsWith('/api/vector'))
   ) {
     return { url: SERVICES.research, name: 'research-service' };
   }
-  // Default: monolith
   return { url: SERVICES.monolith, name: 'monolith' };
 }
 
 // ============================================================
-// PROXY MIDDLEWARE – built dynamically per request
+// PROXY
 // ============================================================
 app.use('/api', (req, res, next) => {
   const target = targetFor(req.originalUrl);
-  logger.info(`→ ${req.method} ${req.originalUrl} → ${target.name} (${target.url})`);
+  logger.info(`→ ${req.method} ${req.originalUrl} → ${target.name}`);
 
   const proxy = createProxyMiddleware({
     target: target.url,
@@ -84,7 +76,6 @@ app.use('/api', (req, res, next) => {
       });
     },
     onProxyReq: (proxyReq, req) => {
-      // Forward user IP for audit logging downstream
       const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
       proxyReq.setHeader('x-forwarded-for', ip);
     },
@@ -94,7 +85,7 @@ app.use('/api', (req, res, next) => {
 });
 
 // ============================================================
-// HEALTH CHECK
+// HEALTH & METRICS
 // ============================================================
 app.get('/health', (req, res) => {
   res.json({
@@ -105,6 +96,11 @@ app.get('/health', (req, res) => {
       .filter(([, url]) => url)
       .map(([name, url]) => ({ name, url })),
   });
+});
+
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', metrics.register.contentType);
+  res.end(await metrics.register.metrics());
 });
 
 // ============================================================
